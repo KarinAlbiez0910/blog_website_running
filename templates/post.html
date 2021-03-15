@@ -24,7 +24,7 @@
     <div class="container">
       <div class="row">
         <div class="col-lg-8 col-md-10 mx-auto">
-            {{ post.body|safe }}
+           {{post.body|striptags}}
           <hr>
 
             <div class="clearfix">
@@ -43,7 +43,7 @@
 
 
 <!--           Comments Area -->
-          {% for comment in comments:%}
+          {% for comment in post.comments:%}
           <div class="col-lg-8 col-md-10 mx-auto comment">
               <ul class="commentList">
                 <li>

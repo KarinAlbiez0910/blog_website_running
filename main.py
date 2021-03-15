@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, flash
+from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_bootstrap import Bootstrap
 from flask_ckeditor import CKEditor
 from datetime import date
@@ -10,6 +10,13 @@ from forms import CreatePostForm, CreateRegisterForm, CreateLoginForm, CreateCom
 from flask_gravatar import Gravatar
 from flask import abort
 from functools import wraps
+import smtplib
+import os
+
+my_email = 'myalbiez@gmail.com'
+my_password = 'KarineProg1'
+recipient = 'kalbiez@yahoo.com'
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
@@ -46,25 +53,30 @@ class BlogPost(db.Model):
     img_url = db.Column(db.String(250), nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     author = relationship("User", back_populates="posts")
+    comments = relationship("Comment", back_populates="parent_post")
+
 
 class User(UserMixin, db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(300), unique=True, nullable=False)
-    password = db.Column(db.String(15), unique=True, nullable=False)
-    name = db.Column(db.String(40), nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(100), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
     posts = relationship("BlogPost", back_populates="author")
     comments = relationship("Comment", back_populates="comment_author")
+
 
 class Comment(db.Model):
     __tablename__ = "comments"
     id = db.Column(db.Integer, primary_key=True)
     text = db.Column(db.Text, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    post_id = db.Column(db.Integer, db.ForeignKey('blog_posts.id'))
     comment_author = relationship("User", back_populates="comments")
+    parent_post = relationship("BlogPost", back_populates="comments")
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
 
 
-#db.create_all()
+db.create_all()
 
 def only_admin(function):
     @wraps(function)
@@ -77,9 +89,6 @@ def only_admin(function):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
-
-
-
 
 @app.route('/')
 def get_all_posts():
@@ -143,19 +152,20 @@ def show_post(post_id):
         if current_user.is_authenticated:
             comment = Comment(
                 text = form.body.data,
-                user_id = current_user.id
+                comment_author=current_user,
+                parent_post=requested_post
             )
             db.session.add(comment)
             db.session.commit()
+
         else:
             flash('Please be sure to log in first')
             return redirect(url_for('login'))
-    comments = Comment.query.all()
+
     return render_template('post.html',
                            post=requested_post,
                            logged_in=current_user.is_authenticated,
-                           form=form,
-                           comments=comments)
+                           form=form)
 
 
 
@@ -164,9 +174,24 @@ def about():
     return render_template("about.html", logged_in=current_user.is_authenticated)
 
 
-@app.route("/contact")
+@app.route("/contact", methods=['POST', 'GET'])
 def contact():
-    return render_template("contact.html", logged_in=current_user.is_authenticated)
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        phone = request.form['phone']
+        message = request.form['message']
+        print(name, email, phone, message)
+        text = f"{name} with the email {email} and " \
+               f"phone number {phone} has sent you the following message: {message}.".encode('utf-8')
+        with smtplib.SMTP(host='smtp.gmail.com') as connection:
+            connection.starttls()
+            connection.login(password=my_password, user=my_email)
+            connection.sendmail(from_addr=my_email,
+                                to_addrs=recipient,
+                                msg=f'Subject: New person got in contact\n\n{text}')
+        return render_template('contact.html', message_sent=True)
+    return render_template('contact.html', message_sent=False, logged_in=current_user.is_authenticated)
 
 
 @app.route("/new-post", methods=['POST', 'GET'])
@@ -188,7 +213,7 @@ def add_new_post():
     return render_template("make-post.html", form=form, logged_in=current_user.is_authenticated)
 
 
-@app.route("/edit-post/<int:post_id>")
+@app.route("/edit-post/<int:post_id>", methods= ['POST', 'GET'])
 @only_admin
 def edit_post(post_id):
     post = BlogPost.query.get(post_id)
@@ -196,14 +221,12 @@ def edit_post(post_id):
         title=post.title,
         subtitle=post.subtitle,
         img_url=post.img_url,
-        author=post.author,
         body=post.body
     )
     if edit_form.validate_on_submit():
         post.title = edit_form.title.data
         post.subtitle = edit_form.subtitle.data
         post.img_url = edit_form.img_url.data
-        post.author = edit_form.author.data
         post.body = edit_form.body.data
         db.session.commit()
         return redirect(url_for("show_post", post_id=post.id))
