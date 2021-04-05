@@ -182,14 +182,14 @@ def contact():
         phone = request.form['phone']
         message = request.form['message']
         print(name, email, phone, message)
-        text = f"{name} with the email {email} and " \
-               f"phone number {phone} has sent you the following message: {message}.".encode('utf-8')
+        #text = f"{name} with the email {email} and " \
+        #       f"phone number {phone} has sent you the following message: {message}.".encode('utf-8')
         with smtplib.SMTP(host='smtp.gmail.com') as connection:
             connection.starttls()
             connection.login(password=my_password, user=my_email)
             connection.sendmail(from_addr=my_email,
                                 to_addrs=recipient,
-                                msg=f'Subject: New person got in contact\n\n{text}')
+                                msg=f'Subject: New person got in contact\n\nhello')
         return render_template('contact.html', message_sent=True)
     return render_template('contact.html', message_sent=False, logged_in=current_user.is_authenticated)
 
